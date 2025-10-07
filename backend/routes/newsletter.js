@@ -1,17 +1,20 @@
 import express from 'express';
 import Newsletter from '../models/Newsletter.js';
-import { Resend } from 'resend';
+import mailjet from 'node-mailjet';
 
 const router = express.Router();
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Mailjet configuration
+const mailjetClient = mailjet.apiConnect(
+  process.env.MJ_APIKEY_PUBLIC || 'your-mailjet-public-key',
+  process.env.MJ_APIKEY_PRIVATE || 'your-mailjet-private-key'
+);
 
-// Enhanced email function for newsletter with Resend
+// Enhanced email function for newsletter with Mailjet
 async function sendWelcomeEmail(subscriber) {
-  // Check if Resend API key is configured
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('Resend API key not configured. Skipping welcome email.');
+  // Check if Mailjet credentials are configured
+  if (!process.env.MJ_APIKEY_PUBLIC || !process.env.MJ_APIKEY_PRIVATE) {
+    console.warn('Mailjet credentials not configured. Skipping welcome email.');
     return;
   }
 
@@ -24,74 +27,92 @@ async function sendWelcomeEmail(subscriber) {
 
       const unsubscribeLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/unsubscribe?token=${subscriber.unsubscribeToken}`;
 
-      const { data, error } = await resend.emails.send({
-        from: 'Kongyu Jesse Portfolio <newsletter@yourdomain.com>', // Replace with your verified domain
-        to: [subscriber.email],
-        subject: '🎉 Welcome to My Newsletter!',
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <style>
-                  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                  .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 40px 20px; text-align: center; border-radius: 10px 10px 0 0; }
-                  .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-                  .welcome-text { font-size: 18px; margin-bottom: 20px; }
-                  .features { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
-                  .feature-item { margin: 10px 0; padding-left: 20px; }
-                  .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
-                  .unsubscribe { text-align: center; margin-top: 20px; font-size: 12px; color: #999; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <div class="header">
-                      <h1>🚀 Welcome Aboard!</h1>
-                      <p>Thank you for subscribing to my newsletter</p>
-                  </div>
-                  <div class="content">
-                      <div class="welcome-text">
-                          <p>Hello,</p>
-                          <p>Thank you for subscribing to my newsletter! I'm excited to have you on board.</p>
-                      </div>
-                      
-                      <div class="features">
-                          <h3>What to expect:</h3>
-                          <div class="feature-item">📧 <strong>Project Updates:</strong> Get notified when I launch new projects</div>
-                          <div class="feature-item">💡 <strong>Tech Insights:</strong> Latest trends and technologies I'm working with</div>
-                          <div class="feature-item">🎯 <strong>Tips & Tutorials:</strong> Valuable content to help you in your journey</div>
-                          <div class="feature-item">🚀 <strong>Career Updates:</strong> My latest achievements and learnings</div>
-                      </div>
+      const request = mailjetClient
+        .post('send', { version: 'v3.1' })
+        .request({
+          Messages: [
+            {
+              From: {
+                Email: process.env.EMAIL_FROM || 'kongyujesse@gmail.com',
+                Name: 'Kongyu Jesse Portfolio'
+              },
+              To: [
+                {
+                  Email: subscriber.email,
+                  Name: subscriber.email.split('@')[0]
+                }
+              ],
+              Subject: '🎉 Welcome to My Newsletter!',
+              HTMLPart: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 40px 20px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .welcome-text { font-size: 18px; margin-bottom: 20px; }
+                        .features { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                        .feature-item { margin: 10px 0; padding-left: 20px; }
+                        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+                        .unsubscribe { text-align: center; margin-top: 20px; font-size: 12px; color: #999; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>🚀 Welcome Aboard!</h1>
+                            <p>Thank you for subscribing to my newsletter</p>
+                        </div>
+                        <div class="content">
+                            <div class="welcome-text">
+                                <p>Hello,</p>
+                                <p>Thank you for subscribing to my newsletter! I'm excited to have you on board.</p>
+                            </div>
+                            
+                            <div class="features">
+                                <h3>What to expect:</h3>
+                                <div class="feature-item">📧 <strong>Project Updates:</strong> Get notified when I launch new projects</div>
+                                <div class="feature-item">💡 <strong>Tech Insights:</strong> Latest trends and technologies I'm working with</div>
+                                <div class="feature-item">🎯 <strong>Tips & Tutorials:</strong> Valuable content to help you in your journey</div>
+                                <div class="feature-item">🚀 <strong>Career Updates:</strong> My latest achievements and learnings</div>
+                            </div>
 
-                      <p>I'll be sending updates periodically with my latest work, insights, and occasional tips about web development and technology.</p>
-                      
-                      <p>If you have any questions or just want to say hello, feel free to reply to this email!</p>
-                      
-                      <p>Best regards,<br><strong>Kongyu Jesse Ntani</strong></p>
-                  </div>
-                  
-                  <div class="unsubscribe">
-                      <p>
-                          <a href="${unsubscribeLink}" style="color: #666; text-decoration: none;">
-                              Unsubscribe from these emails
-                          </a>
-                      </p>
-                  </div>
-                  
-                  <div class="footer">
-                      <p>This email was sent automatically from my portfolio website.</p>
-                  </div>
-              </div>
-          </body>
-          </html>
-        `
-      });
+                            <p>I'll be sending updates periodically with my latest work, insights, and occasional tips about web development and technology.</p>
+                            
+                            <p>If you have any questions or just want to say hello, feel free to reply to this email!</p>
+                            
+                            <p>Best regards,<br><strong>Kongyu Jesse Ntani</strong></p>
+                        </div>
+                        
+                        <div class="unsubscribe">
+                            <p>
+                                <a href="${unsubscribeLink}" style="color: #666; text-decoration: none;">
+                                    Unsubscribe from these emails
+                                </a>
+                            </p>
+                        </div>
+                        
+                        <div class="footer">
+                            <p>This email was sent automatically from my portfolio website.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+              `
+            }
+          ]
+        });
 
-      if (error) {
-        throw new Error(`Resend error: ${error.message}`);
-      }
-
+      // Send email with timeout
+      const result = await Promise.race([
+        request,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Mailjet API timeout after 30s')), 30000)
+        )
+      ]);
+      
       console.log('✅ Welcome email sent successfully to:', subscriber.email);
       return;
       
@@ -101,6 +122,7 @@ async function sendWelcomeEmail(subscriber) {
       
       if (retries > 0) {
         console.warn(`❌ Welcome email attempt failed (${3 - retries}/3). Retrying in 5 seconds...`, error.message);
+        // Wait before retry
         await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
         console.error('❌ All welcome email attempts failed:', error.message);
@@ -108,6 +130,7 @@ async function sendWelcomeEmail(subscriber) {
     }
   }
 
+  // If we get here, all retries failed
   console.error('💥 Final welcome email failure after 3 attempts:', lastError?.message);
 }
 
@@ -149,7 +172,7 @@ router.post('/subscribe', async (req, res) => {
         
         // Send welcome email (non-blocking)
         sendWelcomeEmail(existingSubscriber).catch(error => {
-          console.error('Welcome email failed:', error);
+          console.error('Welcome email failed after all retries:', error);
         });
         
         return res.json({ 
@@ -171,7 +194,7 @@ router.post('/subscribe', async (req, res) => {
     
     // Send welcome email (non-blocking)
     sendWelcomeEmail(subscriber).catch(error => {
-      console.error('Welcome email failed:', error);
+      console.error('Welcome email failed after all retries:', error);
     });
 
     res.status(201).json({

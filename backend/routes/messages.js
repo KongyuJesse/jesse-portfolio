@@ -1,19 +1,22 @@
 // backend/routes/messages.js
 import express from 'express';
 import Message from '../models/Message.js';
-import { Resend } from 'resend';
+import mailjet from 'node-mailjet';
 import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Mailjet configuration
+const mailjetClient = mailjet.apiConnect(
+  process.env.MJ_APIKEY_PUBLIC || 'your-mailjet-public-key',
+  process.env.MJ_APIKEY_PRIVATE || 'your-mailjet-private-key'
+);
 
-// Enhanced email notification function with Resend
+// Enhanced email notification function with Mailjet
 async function sendEmailNotification(message) {
-  // Check if Resend API key is configured
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('Resend API key not configured. Skipping email notification.');
+  // Check if Mailjet credentials are configured
+  if (!process.env.MJ_APIKEY_PUBLIC || !process.env.MJ_APIKEY_PRIVATE) {
+    console.warn('Mailjet credentials not configured. Skipping email notification.');
     return;
   }
 
@@ -24,61 +27,79 @@ async function sendEmailNotification(message) {
     try {
       console.log(`📧 Attempting to send email notification (${4 - retries}/3)...`);
 
-      const { data, error } = await resend.emails.send({
-        from: 'Portfolio Contact <notifications@yourdomain.com>', // Replace with your verified domain
-        to: ['kongyujesse@gmail.com'],
-        subject: `📧 New Portfolio Message: ${message.subject}`,
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <style>
-                  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                  .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
-                  .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }
-                  .message-box { background: white; padding: 15px; border-left: 4px solid #64FFDA; margin: 15px 0; }
-                  .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <div class="header">
-                      <h1>🚀 New Portfolio Message</h1>
-                      <p>You have received a new message from your portfolio website</p>
-                  </div>
-                  <div class="content">
-                      <h2>Message Details</h2>
-                      <div class="message-box">
-                          <p><strong>From:</strong> ${message.name}</p>
-                          <p><strong>Email:</strong> ${message.email}</p>
-                          <p><strong>Subject:</strong> ${message.subject}</p>
-                          <p><strong>Date:</strong> ${new Date(message.createdAt).toLocaleString()}</p>
-                      </div>
-                      <h3>Message Content:</h3>
-                      <div class="message-box">
-                          <p>${message.message.replace(/\n/g, '<br>')}</p>
-                      </div>
-                      <div style="text-align: center; margin-top: 20px;">
-                          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin#messages" style="background: #64FFDA; color: #0A192F; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                              View in Admin Dashboard
-                          </a>
-                      </div>
-                  </div>
-                  <div class="footer">
-                      <p>This email was sent automatically from your portfolio website.</p>
-                  </div>
-              </div>
-          </body>
-          </html>
-        `
-      });
+      const request = mailjetClient
+        .post('send', { version: 'v3.1' })
+        .request({
+          Messages: [
+            {
+              From: {
+                Email: process.env.EMAIL_FROM || 'kongyujesse@gmail.com',
+                Name: 'Portfolio Contact'
+              },
+              To: [
+                {
+                  Email: 'kongyujesse@gmail.com',
+                  Name: 'Kongyu Jesse'
+                }
+              ],
+              Subject: `📧 New Portfolio Message: ${message.subject}`,
+              HTMLPart: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }
+                        .message-box { background: white; padding: 15px; border-left: 4px solid #64FFDA; margin: 15px 0; }
+                        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>🚀 New Portfolio Message</h1>
+                            <p>You have received a new message from your portfolio website</p>
+                        </div>
+                        <div class="content">
+                            <h2>Message Details</h2>
+                            <div class="message-box">
+                                <p><strong>From:</strong> ${message.name}</p>
+                                <p><strong>Email:</strong> ${message.email}</p>
+                                <p><strong>Subject:</strong> ${message.subject}</p>
+                                <p><strong>Date:</strong> ${new Date(message.createdAt).toLocaleString()}</p>
+                            </div>
+                            <h3>Message Content:</h3>
+                            <div class="message-box">
+                                <p>${message.message.replace(/\n/g, '<br>')}</p>
+                            </div>
+                            <div style="text-align: center; margin-top: 20px;">
+                                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin#messages" style="background: #64FFDA; color: #0A192F; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                                    View in Admin Dashboard
+                                </a>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <p>This email was sent automatically from your portfolio website.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+              `
+            }
+          ]
+        });
 
-      if (error) {
-        throw new Error(`Resend error: ${error.message}`);
-      }
-
-      console.log('✅ Email notification sent successfully:', data?.id);
+      // Send email with timeout (30 seconds for API call)
+      const result = await Promise.race([
+        request,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Mailjet API timeout after 30s')), 30000)
+        )
+      ]);
+      
+      console.log('✅ Email notification sent successfully:', result.body.Messages[0].Status);
       
       // Mark message as notified
       await Message.findByIdAndUpdate(message._id, { notified: true });
@@ -90,6 +111,7 @@ async function sendEmailNotification(message) {
       
       if (retries > 0) {
         console.warn(`❌ Email attempt failed (${3 - retries}/3). Retrying in 5 seconds...`, error.message);
+        // Wait before retry
         await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
         console.error('❌ All email attempts failed:', error.message);
@@ -97,6 +119,7 @@ async function sendEmailNotification(message) {
     }
   }
 
+  // If we get here, all retries failed
   console.error('💥 Final email notification failure after 3 attempts:', lastError?.message);
 }
 
@@ -131,7 +154,7 @@ router.post('/', async (req, res) => {
 
     // Send email notification (non-blocking)
     sendEmailNotification(newMessage).catch(error => {
-      console.error('Email notification failed:', error);
+      console.error('Email notification failed after all retries:', error);
     });
 
     res.status(201).json({
