@@ -1,9 +1,9 @@
 // src/App.jsx (Updated)
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import Admin from './pages/Admin'
-import AdminDashboard from './components/Admin/AdminDashboard'
+import Unsubscribe from './pages/Unsubscribe'
 import { NotificationProvider } from './hooks/useNotifications'
 import NotificationContainer from './components/UI/Notification'
 
@@ -15,8 +15,9 @@ function App() {
           <NotificationContainer />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/*" element={<Admin />} />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </Router>

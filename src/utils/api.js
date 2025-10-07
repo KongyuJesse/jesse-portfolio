@@ -1,7 +1,12 @@
-// src/utils/api.js
+// src/utils/api.js (Updated)
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://jesse-portfolio-wslg.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.PROD 
+    ? 'https://jesse-portfolio-wslg.onrender.com/api' 
+    : 'http://localhost:5000/api');
+
+console.log('API Base URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -36,6 +41,40 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Helper function for API calls
+const apiRequest = async (endpoint, options = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  const config = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  };
+
+  // Add auth token if available
+  const token = localStorage.getItem('adminToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  try {
+    console.log(`Making API request to: ${url}`);
+    const response = await fetch(url, config);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('API request failed:', error);
+    throw error;
+  }
+};
 
 // Messages API with better error handling
 export const sendMessage = async (messageData) => {
@@ -195,8 +234,6 @@ export const uploadDocument = async (formData) => {
   return response.data;
 };
 
-// Add these functions to your api.js file
-
 // Newsletter API
 export const subscribeToNewsletter = async (email) => {
   try {
@@ -221,7 +258,7 @@ export const getSubscribers = async () => {
 };
 
 // Export the axios instance as a named export
-export { api };
+export { api, apiRequest };
 
 export default {
   login,
@@ -252,4 +289,5 @@ export default {
   subscribeToNewsletter,
   unsubscribeFromNewsletter,
   getSubscribers,
+  apiRequest,
 };
