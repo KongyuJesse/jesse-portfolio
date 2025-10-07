@@ -61,7 +61,6 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000', 
   'http://localhost:5173',
-  'https://jesse-portfolio-1.onrender.com',
   'https://jesse-portfolio-wslg.onrender.com',
   'https://jesse-portfolio-kf1b.vercel.app',
   'https://jesse-portfolio-kf1b-*.vercel.app', // Pattern for Vercel preview deployments
@@ -218,7 +217,7 @@ app.get('*', (req, res) => {
     message: 'Backend server is running',
     note: 'This is the backend API. Frontend should be served separately.',
     frontendUrl: 'https://jesse-portfolio-kf1b.vercel.app',
-    backendUrl: 'https://jesse-portfolio-1.onrender.com',
+    backendUrl: 'https://jesse-portfolio-wslg.onrender.com',
     availableEndpoints: [
       '/api/health',
       '/api/test',
@@ -292,9 +291,9 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, async () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📊 Health check: https://jesse-portfolio-1.onrender.com/api/health`);
+  console.log(`📊 Health check: https://jesse-portfolio-wslg.onrender.com/api/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🎯 API Base URL: https://jesse-portfolio-1.onrender.com`);
+  console.log(`🎯 API Base URL: https://jesse-portfolio-wslg.onrender.com`);
   console.log(`🎯 Frontend URL: https://jesse-portfolio-kf1b.vercel.app`);
   console.log(`🛡️ CORS Enabled for: ${allowedOrigins.join(', ')}`);
   
