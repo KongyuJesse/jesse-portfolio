@@ -23,6 +23,11 @@ import About from './models/About.js';
 
 const app = express();
 
+// ✅ Trust proxy for correct IP detection behind Render/Heroku/etc
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Validate required environment variables
 const requiredEnvVars = [
   'MONGODB_URI',
@@ -47,21 +52,23 @@ mongoose.connect(process.env.MONGODB_URI, {
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Middleware
-app.use(helmet({
-  contentSecurityPolicy: false
-}));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173'],
+  origin: process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',') 
+    : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173'],
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
+// ✅ Rate limiting (after trust proxy is set)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX) || 1000,
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in headers
+  legacyHeaders: false
 });
 app.use('/api/', limiter);
 
@@ -83,7 +90,7 @@ const initializeData = async () => {
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
-    // Check if admin user exists
+    // Admin user
     const adminExists = await User.findOne({ email: adminEmail });
     if (!adminExists) {
       const adminUser = new User({
@@ -94,18 +101,8 @@ const initializeData = async () => {
       });
       await adminUser.save();
       console.log('✅ Admin user created');
-      
-      // Verify the password works
-      const testUser = await User.findOne({ email: adminEmail });
-      const isMatch = await testUser.comparePassword(adminPassword);
-      console.log('🔐 Password verification test:', isMatch ? '✅ SUCCESS' : '❌ FAILED');
     } else {
-      console.log('✅ Admin user already exists');
-      
-      // Test the existing user's password
       const isMatch = await adminExists.comparePassword(adminPassword);
-      console.log('🔐 Password verification test:', isMatch ? '✅ SUCCESS' : '❌ FAILED');
-      
       if (!isMatch) {
         console.log('⚠️  Password mismatch. Updating password...');
         adminExists.password = adminPassword;
@@ -114,7 +111,7 @@ const initializeData = async () => {
       }
     }
 
-    // Check if about content exists
+    // About content
     const aboutExists = await About.findOne();
     if (!aboutExists) {
       const aboutContent = new About({
@@ -129,28 +126,16 @@ const initializeData = async () => {
           { label: 'Happy Clients', value: '30+', icon: '😊' }
         ],
         services: [
-          {
-            title: 'Frontend Development',
-            description: 'Modern React applications with responsive design',
-            icon: '💻'
-          },
-          {
-            title: 'Backend Development',
-            description: 'Scalable Node.js and Python backend systems',
-            icon: '⚙️'
-          },
-          {
-            title: 'UI/UX Design',
-            description: 'User-centered design with Figma and prototyping',
-            icon: '🎨'
-          }
+          { title: 'Frontend Development', description: 'Modern React applications with responsive design', icon: '💻' },
+          { title: 'Backend Development', description: 'Scalable Node.js and Python backend systems', icon: '⚙️' },
+          { title: 'UI/UX Design', description: 'User-centered design with Figma and prototyping', icon: '🎨' }
         ]
       });
       await aboutContent.save();
       console.log('✅ About content initialized');
     }
   } catch (error) {
-    console.error('Error initializing data:', error);
+    console.error('❌ Error initializing data:', error);
   }
 };
 
@@ -189,7 +174,7 @@ app.listen(PORT, async () => {
   console.log(`✨ Enhanced routes loaded: Projects, Skills, Certificates, Upload, Newsletter`);
 });
 
-// Handle graceful shutdown
+// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n👋 Shutting down backend server...');
   await mongoose.connection.close();
