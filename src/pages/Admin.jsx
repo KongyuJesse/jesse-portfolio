@@ -1,9 +1,8 @@
-// src/pages/Admin.jsx (Updated)
+// src/pages/Admin.jsx (Fixed)
 import React, { useState, useEffect } from 'react'
 import { useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { login, verifyToken } from '../utils/api'
 import { useNotifications } from '../hooks/useNotifications'
-import NotificationContainer from '../components/UI/Notification'
 import AdminDashboard from '../components/Admin/AdminDashboard'
 import AdminLogin from '../components/Admin/AdminLogin'
 
@@ -24,10 +23,12 @@ const Admin = () => {
       if (token) {
         await verifyToken()
         setIsAuthenticated(true)
-        // Redirect to dashboard if on base admin path
+        // If accessing base admin path, redirect to dashboard
         if (location.pathname === '/admin' || location.pathname === '/admin/') {
           navigate('/admin/dashboard', { replace: true })
         }
+      } else {
+        setIsAuthenticated(false)
       }
     } catch (error) {
       console.error('Auth check failed:', error)
@@ -54,7 +55,7 @@ const Admin = () => {
       navigate('/admin/dashboard', { replace: true })
     } catch (error) {
       console.error('Login failed:', error)
-      const errorMessage = error.message || 'Login failed. Please try again.'
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please try again.'
       addNotification({
         type: 'error',
         title: 'Login Failed',
@@ -88,8 +89,6 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-navy-900">
-      <NotificationContainer />
-      
       <Routes>
         <Route 
           index 
@@ -107,6 +106,7 @@ const Admin = () => {
             <Navigate to="/admin" replace />
           } 
         />
+        {/* Catch all admin routes */}
         <Route 
           path="*" 
           element={

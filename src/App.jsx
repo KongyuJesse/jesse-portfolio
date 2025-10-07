@@ -1,4 +1,4 @@
-// src/App.jsx (HashRouter version)
+// src/App.jsx (Fixed HashRouter version)
 import React from 'react'
 import { HashRouter as Router, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
@@ -17,6 +17,8 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/admin/*" element={<Admin />} />
             <Route path="/unsubscribe" element={<Unsubscribe />} />
+            {/* Catch all route - redirect to home */}
+            <Route path="*" element={<Home />} />
           </Routes>
         </div>
       </Router>

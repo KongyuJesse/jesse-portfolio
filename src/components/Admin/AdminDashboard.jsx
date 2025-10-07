@@ -1,4 +1,4 @@
-// src/components/Admin/AdminDashboard.jsx (Updated)
+// src/components/Admin/AdminDashboard.jsx (Fixed)
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import ProjectManager from './ProjectManager';
@@ -55,12 +55,20 @@ const AdminDashboard = ({ onLogout }) => {
               <h1 className="text-2xl font-bold text-teal">Admin Dashboard</h1>
               <p className="text-muted-silver text-sm">Manage your portfolio content</p>
             </div>
-            <button
-              onClick={onLogout}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              <a 
+                href="/" 
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+              >
+                View Portfolio
+              </a>
+              <button
+                onClick={onLogout}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -75,7 +83,7 @@ const AdminDashboard = ({ onLogout }) => {
               className={`px-6 py-3 rounded-md capitalize transition-colors whitespace-nowrap flex items-center space-x-2 ${
                 activeTab === tab.id
                   ? 'bg-teal text-navy-900 font-semibold'
-                  : 'text-soft-white hover:text-teal'
+                  : 'text-soft-white hover:text-teal hover:bg-teal/10'
               }`}
             >
               <span>{tab.icon}</span>

@@ -1,4 +1,4 @@
-// src/components/Admin/AdminLogin.jsx
+// src/components/Admin/AdminLogin.jsx (Enhanced)
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -10,12 +10,18 @@ const AdminLogin = ({ onLogin }) => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoginError('')
+    
+    if (!loginData.email || !loginData.password) {
+      setLoginError('Please fill in all fields')
+      return
+    }
+    
     setIsLoading(true)
     
     try {
       await onLogin(loginData)
     } catch (error) {
-      setLoginError(error.message)
+      setLoginError(error.message || 'Login failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -60,7 +66,7 @@ const AdminLogin = ({ onLogin }) => {
             </div>
             
             {loginError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 animate-pulse">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
                 <div className="flex items-center space-x-2 text-red-400">
                   <span>⚠️</span>
                   <span className="text-sm font-medium">{loginError}</span>
@@ -85,7 +91,7 @@ const AdminLogin = ({ onLogin }) => {
             
             <div className="text-center">
               <p className="text-sm text-muted-silver">
-                Login To make Changes
+                Login to make changes to your portfolio
               </p>
             </div>
           </form>

@@ -7,8 +7,10 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'https://jesse-portfolio-wslg.onrender.com/api',
+        target: 'https://jesse-portfolio-wslg.onrender.com',
         changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '/api')
       }
     }
   },

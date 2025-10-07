@@ -1,4 +1,4 @@
-// src/utils/api.js (Updated)
+// src/utils/api.js (Enhanced)
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
@@ -13,7 +13,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 15000, // Increased timeout
 });
 
 // Request interceptor to add auth token
@@ -36,97 +36,30 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('adminToken');
-      window.location.href = '/admin';
+      // Use window.location for more reliable redirect
+      window.location.href = '/#/admin';
     }
     return Promise.reject(error);
   }
 );
 
-// Helper function for API calls
-const apiRequest = async (endpoint, options = {}) => {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
-  const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  };
-
-  // Add auth token if available
-  const token = localStorage.getItem('adminToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
+// Enhanced API functions with better error handling
+export const login = async (credentials) => {
   try {
-    console.log(`Making API request to: ${url}`);
-    const response = await fetch(url, config);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('API request failed:', error);
-    throw error;
-  }
-};
-
-// Messages API with better error handling
-export const sendMessage = async (messageData) => {
-  try {
-    const response = await api.post('/messages', messageData);
+    const response = await api.post('/auth/login', credentials);
     return response.data;
   } catch (error) {
-    // Enhanced error handling
-    if (error.response?.status === 400) {
-      const serverMessage = error.response.data?.message;
-      const validationErrors = error.response.data?.errors;
-      
-      const errorMessage = validationErrors 
-        ? validationErrors.join(', ')
-        : serverMessage || 'Please check your input and try again';
-      
-      throw new Error(errorMessage);
-    }
-    
-    // Network or server errors
-    if (error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
-      throw new Error('Unable to connect to server. Please check your connection.');
-    }
-    
-    throw new Error(error.response?.data?.message || 'Failed to send message. Please try again.');
+    throw new Error(error.response?.data?.message || 'Login failed. Please check your credentials.');
   }
-};
-
-export const getMessages = async () => {
-  const response = await api.get('/messages');
-  return response.data;
-};
-
-export const markMessageAsRead = async (id) => {
-  const response = await api.patch(`/messages/${id}/read`);
-  return response.data;
-};
-
-export const deleteMessage = async (id) => {
-  const response = await api.delete(`/messages/${id}`);
-  return response.data;
-};
-
-// Auth API
-export const login = async (credentials) => {
-  const response = await api.post('/auth/login', credentials);
-  return response.data;
 };
 
 export const verifyToken = async () => {
-  const response = await api.get('/auth/verify');
-  return response.data;
+  try {
+    const response = await api.get('/auth/verify');
+    return response.data;
+  } catch (error) {
+    throw new Error('Session expired. Please login again.');
+  }
 };
 
 // Projects API
@@ -179,6 +112,46 @@ export const updateCertificate = async (id, certificateData) => {
 
 export const deleteCertificate = async (id) => {
   const response = await api.delete(`/certificates/${id}`);
+  return response.data;
+};
+
+// Messages API with better error handling
+export const sendMessage = async (messageData) => {
+  try {
+    const response = await api.post('/messages', messageData);
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 400) {
+      const serverMessage = error.response.data?.message;
+      const validationErrors = error.response.data?.errors;
+      
+      const errorMessage = validationErrors 
+        ? validationErrors.join(', ')
+        : serverMessage || 'Please check your input and try again';
+      
+      throw new Error(errorMessage);
+    }
+    
+    if (error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
+      throw new Error('Unable to connect to server. Please check your connection.');
+    }
+    
+    throw new Error(error.response?.data?.message || 'Failed to send message. Please try again.');
+  }
+};
+
+export const getMessages = async () => {
+  const response = await api.get('/messages');
+  return response.data;
+};
+
+export const markMessageAsRead = async (id) => {
+  const response = await api.patch(`/messages/${id}/read`);
+  return response.data;
+};
+
+export const deleteMessage = async (id) => {
+  const response = await api.delete(`/messages/${id}`);
   return response.data;
 };
 
@@ -257,8 +230,8 @@ export const getSubscribers = async () => {
   return response.data;
 };
 
-// Export the axios instance as a named export
-export { api, apiRequest };
+// Export the axios instance
+export { api };
 
 export default {
   login,
@@ -289,5 +262,4 @@ export default {
   subscribeToNewsletter,
   unsubscribeFromNewsletter,
   getSubscribers,
-  apiRequest,
 };
