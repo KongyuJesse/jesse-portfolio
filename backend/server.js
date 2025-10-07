@@ -23,7 +23,7 @@ import About from './models/About.js';
 
 const app = express();
 
-// ✅ FIX: Add trust proxy setting (add this line)
+// ✅ FIX: Add trust proxy setting
 app.set('trust proxy', true);
 
 // Validate required environment variables
@@ -49,26 +49,52 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('✅ MongoDB Connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
+// ✅ FIX: Updated CORS configuration
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000', 
+      'http://localhost:5173',
+      'https://jesse-portfolio-1.onrender.com',
+      'https://jesse-portfolio-wslg.onrender.com'
+    ];
+    
+    // Add any custom domains from environment variable
+    if (process.env.ALLOWED_ORIGINS) {
+      allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('Blocked by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
 // Middleware
 app.use(helmet({
   contentSecurityPolicy: false
 }));
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173'],
-  credentials: true
-}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// ✅ FIX: Explicitly handle preflight requests
+app.options('*', cors());
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX) || 1000,
   message: 'Too many requests from this IP, please try again later.',
-  // ✅ Optional: Add additional rate limit configuration for proxy setup
-  keyGenerator: (req) => {
-    return req.ip; // This will now work correctly with trust proxy enabled
-  }
 });
 app.use('/api/', limiter);
 
@@ -168,19 +194,18 @@ app.get('/api/health', (req, res) => {
     message: 'Backend is running',
     timestamp: new Date().toISOString(),
     database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-    environment: process.env.NODE_ENV || 'development',
-    enhancedRoutes: {
-      projects: true,
-      skills: true,
-      certificates: true,
-      upload: true,
-      newsletter: true
-    }
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Handle preflight requests
-app.options('*', cors());
+// ✅ FIX: Add a test endpoint to verify CORS
+app.get('/api/test-cors', (req, res) => {
+  res.json({ 
+    message: 'CORS is working!',
+    origin: req.get('origin'),
+    allowed: true
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 
@@ -188,13 +213,11 @@ app.listen(PORT, async () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔧 Trust proxy: ${app.get('trust proxy')}`); // Log trust proxy status
+  console.log(`🔧 Trust proxy: ${app.get('trust proxy')}`);
+  console.log(`🎯 Allowed origins: https://jesse-portfolio-1.onrender.com, https://jesse-portfolio-wslg.onrender.com`);
   
   // Initialize data after server starts
   await initializeData();
-  
-  console.log(`🔑 Admin login: ${process.env.ADMIN_EMAIL}`);
-  console.log(`✨ Enhanced routes loaded: Projects, Skills, Certificates, Upload, Newsletter`);
 });
 
 // Handle graceful shutdown
