@@ -61,7 +61,7 @@ app.use(cors({
       'http://localhost:3000',
       'http://127.0.0.1:3000', 
       'http://localhost:5173',
-      'https://jesse-portfolio-1.onrender.com',
+      'https://jesse-portfolio-kf1b-ki3mukjr4-kongyu-jesse-ntanis-projects.vercel.app/',
       'https://jesse-portfolio-wslg.onrender.com'
     ];
     
