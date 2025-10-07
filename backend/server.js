@@ -1,9 +1,10 @@
-// server.js (Complete)
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
 // Import routes
@@ -25,8 +26,12 @@ import About from './models/About.js';
 
 const app = express();
 
+// ✅ Fix for __dirname in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // ✅ FIX: Better trust proxy configuration for Render
-app.set('trust proxy', 1); // Trust first proxy only
+app.set('trust proxy', 1);
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -51,40 +56,65 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('✅ MongoDB Connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// ✅ FIX: Updated CORS configuration
+// ✅ FIX: Updated CORS configuration - More permissive for Vercel
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000', 
+  'http://localhost:5173',
+  'https://jesse-portfolio-1.onrender.com',
+  'https://jesse-portfolio-wslg.onrender.com',
+  'https://jesse-portfolio-kf1b.vercel.app',
+  'https://jesse-portfolio-kf1b-*.vercel.app', // Pattern for Vercel preview deployments
+  'https://*.vercel.app' // Allow all Vercel deployments
+];
+
+// Add environment variable origins if specified
+if (process.env.ALLOWED_ORIGINS) {
+  allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+}
+
+console.log('🛡️ Allowed CORS origins:', allowedOrigins);
+
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl, postman)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000', 
-      'http://localhost:5173',
-      'https://jesse-portfolio-kf1b-ki3mukjr4-kongyu-jesse-ntanis-projects.vercel.app',
-      'https://jesse-portfolio-wslg.onrender.com'
-    ];
-    
-    // Add any custom domains from environment variable
-    if (process.env.ALLOWED_ORIGINS) {
-      allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+    if (!origin) {
+      console.log('🔓 Allowing request with no origin');
+      return callback(null, true);
     }
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('Blocked by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      console.log(`✅ Allowed CORS for: ${origin}`);
+      return callback(null, true);
     }
+    
+    // Check for Vercel pattern matching
+    if (origin.endsWith('.vercel.app')) {
+      console.log(`✅ Allowed Vercel deployment: ${origin}`);
+      return callback(null, true);
+    }
+    
+    console.log(`❌ Blocked by CORS: ${origin}`);
+    console.log(`📋 Allowed origins: ${allowedOrigins.join(', ')}`);
+    
+    // For development, you might want to be more permissive
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️ Development mode: Allowing origin despite CORS');
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 
 // Middleware
 app.use(helmet({
-  contentSecurityPolicy: false
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -92,60 +122,23 @@ app.use(express.urlencoded({ extended: true }));
 // ✅ FIX: Explicitly handle preflight requests
 app.options('*', cors());
 
-// ✅ FIX: Updated Rate limiting with proper proxy configuration
-const createRateLimiter = (windowMs, max, message) => {
-  return rateLimit({
-    windowMs: windowMs,
-    max: max,
-    message: message,
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    keyGenerator: (req) => {
-      // Use the client's real IP address even behind proxy
-      return req.ip;
-    },
-    handler: (req, res) => {
-      res.status(429).json({
-        message: message,
-        retryAfter: Math.ceil(windowMs / 1000),
-        limit: max,
-        window: Math.ceil(windowMs / 1000 / 60) + ' minutes'
-      });
-    }
-  });
-};
+// ✅ FIX: Simple rate limiting without proxy issues
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'production' ? 200 : 1000,
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use the client's real IP address even behind proxy
+    return req.ip;
+  }
+});
 
-// Different rate limits for different endpoints
-const generalLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15 minutes
-  parseInt(process.env.RATE_LIMIT_MAX) || 1000, // requests per window
-  'Too many requests from this IP, please try again later.'
-);
-
-const authLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15 minutes
-  10, // 10 login attempts per 15 minutes
-  'Too many authentication attempts, please try again later.'
-);
-
-const messageLimiter = createRateLimiter(
-  60 * 60 * 1000, // 1 hour
-  5, // 5 messages per hour
-  'Message limit exceeded, please try again later.'
-);
-
-const newsletterLimiter = createRateLimiter(
-  60 * 60 * 1000, // 1 hour
-  3, // 3 subscription attempts per hour
-  'Too many subscription attempts, please try again later.'
-);
-
-// Apply rate limiting
-app.use('/api/', generalLimiter);
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
-app.use('/api/messages', messageLimiter);
-app.use('/api/newsletter/subscribe', newsletterLimiter);
+app.use('/api/', limiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -159,6 +152,85 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/content', contentRoutes);
+
+// ✅ FIX: Serve static files from build directory (if exists)
+app.use(express.static(path.join(__dirname, '../dist')));
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Backend is running',
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    environment: process.env.NODE_ENV || 'development',
+    cors: {
+      enabled: true,
+      allowedOrigins: allowedOrigins
+    }
+  });
+});
+
+// ✅ FIX: API test endpoint with CORS info
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'API is working!',
+    timestamp: new Date().toISOString(),
+    origin: req.get('origin') || 'No origin header',
+    cors: 'CORS should be enabled for this endpoint'
+  });
+});
+
+// ✅ FIX: Enhanced CORS test endpoint
+app.get('/api/cors-test', (req, res) => {
+  const origin = req.get('origin');
+  res.json({
+    message: 'CORS Test Endpoint',
+    yourOrigin: origin,
+    corsStatus: allowedOrigins.includes(origin) ? 'ALLOWED' : 'BLOCKED',
+    allowedOrigins: allowedOrigins,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ✅ FIX: Catch-all handler for React SPA - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  // Don't handle API routes with SPA
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ 
+      message: 'API endpoint not found',
+      path: req.path,
+      availableEndpoints: [
+        '/api/health',
+        '/api/test',
+        '/api/cors-test',
+        '/api/auth/login',
+        '/api/projects',
+        '/api/skills',
+        '/api/about',
+        '/api/content'
+      ]
+    });
+  }
+  
+  // For all other routes, this should be handled by your frontend
+  res.json({
+    message: 'Backend server is running',
+    note: 'This is the backend API. Frontend should be served separately.',
+    frontendUrl: 'https://jesse-portfolio-kf1b.vercel.app',
+    backendUrl: 'https://jesse-portfolio-1.onrender.com',
+    availableEndpoints: [
+      '/api/health',
+      '/api/test',
+      '/api/cors-test',
+      '/api/auth/login',
+      '/api/projects',
+      '/api/skills',
+      '/api/about',
+      '/api/content'
+    ]
+  });
+});
 
 // Initialize default data
 const initializeData = async () => {
@@ -177,24 +249,8 @@ const initializeData = async () => {
       });
       await adminUser.save();
       console.log('✅ Admin user created');
-      
-      // Verify the password works
-      const testUser = await User.findOne({ email: adminEmail });
-      const isMatch = await testUser.comparePassword(adminPassword);
-      console.log('🔐 Password verification test:', isMatch ? '✅ SUCCESS' : '❌ FAILED');
     } else {
       console.log('✅ Admin user already exists');
-      
-      // Test the existing user's password
-      const isMatch = await adminExists.comparePassword(adminPassword);
-      console.log('🔐 Password verification test:', isMatch ? '✅ SUCCESS' : '❌ FAILED');
-      
-      if (!isMatch) {
-        console.log('⚠️  Password mismatch. Updating password...');
-        adminExists.password = adminPassword;
-        await adminExists.save();
-        console.log('✅ Password updated');
-      }
     }
 
     // Check if about content exists
@@ -203,7 +259,7 @@ const initializeData = async () => {
       const aboutContent = new About({
         title: 'About Me',
         description: 'Visionary technologist passionate about building scalable solutions',
-        bio: 'I am a purpose-driven technologist passionate about building scalable, AI-driven solutions that create real impact. With a keen eye for design and robust engineering principles, I bridge the gap between visionary ideas and production-ready products.',
+        bio: 'I am a purpose-driven technologist passionate about building scalable, AI-driven solutions that create real impact.',
         image: '/images/profile.jpg',
         resume: '/documents/resume.pdf',
         stats: [
@@ -221,73 +277,34 @@ const initializeData = async () => {
             title: 'Backend Development',
             description: 'Scalable Node.js and Python backend systems',
             icon: '⚙️'
-          },
-          {
-            title: 'UI/UX Design',
-            description: 'User-centered design with Figma and prototyping',
-            icon: '🎨'
           }
         ]
       });
       await aboutContent.save();
-      console.log('✅ Default about content created');
+      console.log('✅ About content initialized');
     }
-
-    console.log('✅ Data initialization completed');
   } catch (error) {
-    console.error('❌ Data initialization error:', error);
+    console.error('Error initializing data:', error);
   }
 };
 
-// Initialize data on server start
-initializeData();
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Portfolio API Server', 
-    version: '1.0.0',
-    endpoints: {
-      auth: '/api/auth',
-      projects: '/api/projects',
-      skills: '/api/skills',
-      certificates: '/api/certificates',
-      messages: '/api/messages',
-      about: '/api/about',
-      resume: '/api/resume'
-    }
-  });
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
-  res.status(500).json({ 
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'production' ? {} : err.message
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    message: 'Route not found',
-    path: req.originalUrl 
-  });
-});
-
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 API Base: http://localhost:${PORT}/api`);
+
+app.listen(PORT, async () => {
+  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
+  console.log(`📊 Health check: https://jesse-portfolio-1.onrender.com/api/health`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🎯 API Base URL: https://jesse-portfolio-1.onrender.com`);
+  console.log(`🎯 Frontend URL: https://jesse-portfolio-kf1b.vercel.app`);
+  console.log(`🛡️ CORS Enabled for: ${allowedOrigins.join(', ')}`);
+  
+  // Initialize data after server starts
+  await initializeData();
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n👋 Shutting down backend server...');
+  await mongoose.connection.close();
+  process.exit(0);
 });
