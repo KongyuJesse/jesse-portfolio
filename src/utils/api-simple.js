@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api'
+const API_BASE_URL = 'https://jesse-portfolio-wslg.onrender.com/api'
 
 // Simple API functions for testing
 export const api = {
