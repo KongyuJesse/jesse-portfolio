@@ -1,3 +1,4 @@
+// server.js (Complete)
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -229,70 +230,64 @@ const initializeData = async () => {
         ]
       });
       await aboutContent.save();
-      console.log('✅ About content initialized');
+      console.log('✅ Default about content created');
     }
+
+    console.log('✅ Data initialization completed');
   } catch (error) {
-    console.error('Error initializing data:', error);
+    console.error('❌ Data initialization error:', error);
   }
 };
 
-// Health check
+// Initialize data on server start
+initializeData();
+
+// Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  res.status(200).json({ 
     status: 'OK', 
-    message: 'Backend is running',
-    timestamp: new Date().toISOString(),
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-    environment: process.env.NODE_ENV || 'development',
-    rateLimit: {
-      general: '1000 requests per 15 minutes',
-      auth: '10 attempts per 15 minutes',
-      messages: '5 per hour',
-      newsletter: '3 subscriptions per hour'
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Portfolio API Server', 
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      projects: '/api/projects',
+      skills: '/api/skills',
+      certificates: '/api/certificates',
+      messages: '/api/messages',
+      about: '/api/about',
+      resume: '/api/resume'
     }
   });
 });
 
-// ✅ FIX: Add a test endpoint to verify CORS
-app.get('/api/test-cors', (req, res) => {
-  res.json({ 
-    message: 'CORS is working!',
-    origin: req.get('origin'),
-    allowed: true,
-    clientIp: req.ip,
-    trustedProxy: app.get('trust proxy')
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err.stack);
+  res.status(500).json({ 
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'production' ? {} : err.message
   });
 });
 
-// Serve admin panel static files (if you have them)
-app.use('/admin', express.static('admin'));
-
-// Catch-all handler for admin routes (for SPA routing)
-app.get('/admin*', (req, res) => {
-  res.json({ 
-    message: 'Admin API endpoint',
-    path: req.path,
-    method: req.method
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ 
+    message: 'Route not found',
+    path: req.originalUrl 
   });
 });
 
 const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, async () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔧 Trust proxy: ${app.get('trust proxy')}`);
-  console.log(`🎯 Allowed origins: https://jesse-portfolio-1.onrender.com, https://jesse-portfolio-wslg.onrender.com`);
-  console.log(`🛡️ Rate limiting: Enabled with proxy-safe configuration`);
-  
-  // Initialize data after server starts
-  await initializeData();
-});
-
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n👋 Shutting down backend server...');
-  await mongoose.connection.close();
-  process.exit(0);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 API Base: http://localhost:${PORT}/api`);
 });

@@ -1,4 +1,4 @@
-// src/components/Admin/AdminDashboard.jsx
+// src/components/Admin/AdminDashboard.jsx (Updated)
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import ProjectManager from './ProjectManager';
@@ -10,7 +10,7 @@ import MessageManager from './MessageManager';
 import DashboardStats from './DashboardStats';
 import { useNotifications } from '../../hooks/useNotifications';
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { addNotification } = useNotifications();
 
@@ -56,10 +56,7 @@ const AdminDashboard = () => {
               <p className="text-muted-silver text-sm">Manage your portfolio content</p>
             </div>
             <button
-              onClick={() => {
-                localStorage.removeItem('adminToken');
-                window.location.href = '/admin';
-              }}
+              onClick={onLogout}
               className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
             >
               Logout

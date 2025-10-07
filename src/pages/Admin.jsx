@@ -1,6 +1,6 @@
 // src/pages/Admin.jsx (Updated)
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Routes, Route, useLocation } from 'react-router-dom'
 import { login, verifyToken } from '../utils/api'
 import { useNotifications } from '../hooks/useNotifications'
 import NotificationContainer from '../components/UI/Notification'
@@ -13,6 +13,7 @@ const Admin = () => {
   const [loginError, setLoginError] = useState('')
   const { addNotification } = useNotifications()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     checkAuth()
@@ -24,11 +25,16 @@ const Admin = () => {
       if (token) {
         await verifyToken()
         setIsAuthenticated(true)
+        // If already on dashboard, stay there
+        if (location.pathname === '/admin') {
+          navigate('/admin/dashboard')
+        }
       }
     } catch (error) {
       console.error('Auth check failed:', error)
       localStorage.removeItem('adminToken')
       setIsAuthenticated(false)
+      navigate('/admin')
     } finally {
       setLoading(false)
     }
@@ -62,6 +68,17 @@ const Admin = () => {
         message: errorMessage
       })
     }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken')
+    setIsAuthenticated(false)
+    navigate('/admin')
+    addNotification({
+      type: 'info',
+      title: 'Logged Out',
+      message: 'You have been successfully logged out'
+    })
   }
 
   if (loading) {
@@ -133,11 +150,20 @@ const Admin = () => {
             </form>
           </div>
         </div>
+        <NotificationContainer />
       </div>
     )
   }
 
-  return <AdminDashboard />
+  return (
+    <div className="min-h-screen bg-navy-900">
+      <Routes>
+        <Route path="/dashboard" element={<AdminDashboard onLogout={handleLogout} />} />
+        <Route path="/" element={<AdminDashboard onLogout={handleLogout} />} />
+      </Routes>
+      <NotificationContainer />
+    </div>
+  )
 }
 
 export default Admin
