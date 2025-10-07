@@ -1,6 +1,6 @@
-// src/App.jsx (Updated)
+// src/App.jsx (HashRouter version)
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter as Router, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Admin from './pages/Admin'
 import Unsubscribe from './pages/Unsubscribe'
@@ -17,7 +17,6 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/admin/*" element={<Admin />} />
             <Route path="/unsubscribe" element={<Unsubscribe />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </Router>
