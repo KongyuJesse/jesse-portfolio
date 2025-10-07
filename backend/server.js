@@ -16,6 +16,7 @@ import resumeRoutes from './routes/resume.js';
 import uploadRoutes from './routes/upload.js';
 import notificationRoutes from './routes/notifications.js';
 import newsletterRoutes from './routes/newsletter.js';
+import contentRoutes from './routes/content.js';
 
 // Import models
 import User from './models/User.js';
@@ -23,8 +24,8 @@ import About from './models/About.js';
 
 const app = express();
 
-// ✅ FIX: Add trust proxy setting
-app.set('trust proxy', true);
+// ✅ FIX: Better trust proxy configuration for Render
+app.set('trust proxy', 1); // Trust first proxy only
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -90,13 +91,60 @@ app.use(express.urlencoded({ extended: true }));
 // ✅ FIX: Explicitly handle preflight requests
 app.options('*', cors());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 1000,
-  message: 'Too many requests from this IP, please try again later.',
-});
-app.use('/api/', limiter);
+// ✅ FIX: Updated Rate limiting with proper proxy configuration
+const createRateLimiter = (windowMs, max, message) => {
+  return rateLimit({
+    windowMs: windowMs,
+    max: max,
+    message: message,
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    keyGenerator: (req) => {
+      // Use the client's real IP address even behind proxy
+      return req.ip;
+    },
+    handler: (req, res) => {
+      res.status(429).json({
+        message: message,
+        retryAfter: Math.ceil(windowMs / 1000),
+        limit: max,
+        window: Math.ceil(windowMs / 1000 / 60) + ' minutes'
+      });
+    }
+  });
+};
+
+// Different rate limits for different endpoints
+const generalLimiter = createRateLimiter(
+  15 * 60 * 1000, // 15 minutes
+  parseInt(process.env.RATE_LIMIT_MAX) || 1000, // requests per window
+  'Too many requests from this IP, please try again later.'
+);
+
+const authLimiter = createRateLimiter(
+  15 * 60 * 1000, // 15 minutes
+  10, // 10 login attempts per 15 minutes
+  'Too many authentication attempts, please try again later.'
+);
+
+const messageLimiter = createRateLimiter(
+  60 * 60 * 1000, // 1 hour
+  5, // 5 messages per hour
+  'Message limit exceeded, please try again later.'
+);
+
+const newsletterLimiter = createRateLimiter(
+  60 * 60 * 1000, // 1 hour
+  3, // 3 subscription attempts per hour
+  'Too many subscription attempts, please try again later.'
+);
+
+// Apply rate limiting
+app.use('/api/', generalLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/messages', messageLimiter);
+app.use('/api/newsletter/subscribe', newsletterLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -109,6 +157,7 @@ app.use('/api/resume', resumeRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/content', contentRoutes);
 
 // Initialize default data
 const initializeData = async () => {
@@ -194,7 +243,13 @@ app.get('/api/health', (req, res) => {
     message: 'Backend is running',
     timestamp: new Date().toISOString(),
     database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    rateLimit: {
+      general: '1000 requests per 15 minutes',
+      auth: '10 attempts per 15 minutes',
+      messages: '5 per hour',
+      newsletter: '3 subscriptions per hour'
+    }
   });
 });
 
@@ -203,7 +258,21 @@ app.get('/api/test-cors', (req, res) => {
   res.json({ 
     message: 'CORS is working!',
     origin: req.get('origin'),
-    allowed: true
+    allowed: true,
+    clientIp: req.ip,
+    trustedProxy: app.get('trust proxy')
+  });
+});
+
+// Serve admin panel static files (if you have them)
+app.use('/admin', express.static('admin'));
+
+// Catch-all handler for admin routes (for SPA routing)
+app.get('/admin*', (req, res) => {
+  res.json({ 
+    message: 'Admin API endpoint',
+    path: req.path,
+    method: req.method
   });
 });
 
@@ -215,6 +284,7 @@ app.listen(PORT, async () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔧 Trust proxy: ${app.get('trust proxy')}`);
   console.log(`🎯 Allowed origins: https://jesse-portfolio-1.onrender.com, https://jesse-portfolio-wslg.onrender.com`);
+  console.log(`🛡️ Rate limiting: Enabled with proxy-safe configuration`);
   
   // Initialize data after server starts
   await initializeData();

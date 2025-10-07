@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 
 const router = express.Router();
 
-// Subscribe to newsletter
+// Subscribe to newsletter - FIXED DUPLICATE HANDLING
 router.post('/subscribe', async (req, res) => {
   try {
     const { email } = req.body;
@@ -24,34 +24,45 @@ router.post('/subscribe', async (req, res) => {
       });
     }
 
-    // Check if already subscribed
-    const existingSubscriber = await Newsletter.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if already subscribed with better error handling
+    const existingSubscriber = await Newsletter.findOne({ email: normalizedEmail });
     if (existingSubscriber) {
       if (existingSubscriber.subscribed) {
-        return res.status(400).json({ 
-          message: 'This email is already subscribed to our newsletter' 
+        return res.status(409).json({ 
+          message: 'This email is already subscribed to our newsletter',
+          code: 'ALREADY_SUBSCRIBED'
         });
       } else {
         // Resubscribe
         existingSubscriber.subscribed = true;
+        existingSubscriber.subscriptionDate = new Date();
         await existingSubscriber.save();
+        
         await sendWelcomeEmail(existingSubscriber);
+        
         return res.json({ 
           message: 'Successfully resubscribed to our newsletter!',
-          subscriber: existingSubscriber
+          subscriber: {
+            email: existingSubscriber.email,
+            subscriptionDate: existingSubscriber.subscriptionDate
+          }
         });
       }
     }
 
     // Create new subscriber
     const subscriber = new Newsletter({
-      email: email.toLowerCase().trim()
+      email: normalizedEmail
     });
 
     await subscriber.save();
     
-    // Send welcome email
-    await sendWelcomeEmail(subscriber);
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail(subscriber).catch(error => {
+      console.error('Failed to send welcome email:', error);
+    });
 
     res.status(201).json({
       message: 'Successfully subscribed to our newsletter!',
@@ -65,8 +76,9 @@ router.post('/subscribe', async (req, res) => {
     console.error('Subscription error:', error);
     
     if (error.code === 11000) {
-      return res.status(400).json({ 
-        message: 'This email is already subscribed' 
+      return res.status(409).json({ 
+        message: 'This email is already subscribed',
+        code: 'DUPLICATE_EMAIL'
       });
     }
     
@@ -80,15 +92,21 @@ router.post('/subscribe', async (req, res) => {
 // Unsubscribe from newsletter
 router.post('/unsubscribe', async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, email } = req.body;
 
-    if (!token) {
+    if (!token && !email) {
       return res.status(400).json({ 
-        message: 'Unsubscribe token is required' 
+        message: 'Unsubscribe token or email is required' 
       });
     }
 
-    const subscriber = await Newsletter.findOne({ unsubscribeToken: token });
+    let subscriber;
+    if (token) {
+      subscriber = await Newsletter.findOne({ unsubscribeToken: token });
+    } else if (email) {
+      subscriber = await Newsletter.findOne({ email: email.toLowerCase().trim() });
+    }
+
     if (!subscriber) {
       return res.status(404).json({ 
         message: 'Subscriber not found' 
@@ -116,6 +134,18 @@ router.get('/subscribers', async (req, res) => {
     const subscribers = await Newsletter.find({ subscribed: true }).sort({ subscriptionDate: -1 });
     res.json(subscribers);
   } catch (error) {
+    console.error('Error fetching subscribers:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get subscriber count
+router.get('/count', async (req, res) => {
+  try {
+    const count = await Newsletter.countDocuments({ subscribed: true });
+    res.json({ count });
+  } catch (error) {
+    console.error('Error fetching subscriber count:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -143,7 +173,6 @@ async function sendWelcomeEmail(subscriber) {
     });
 
     await transporter.verify();
-    console.log('Email server connection verified for newsletter');
 
     const unsubscribeLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/unsubscribe?token=${subscriber.unsubscribeToken}`;
 
