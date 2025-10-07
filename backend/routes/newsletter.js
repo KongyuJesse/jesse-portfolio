@@ -1,60 +1,32 @@
 import express from 'express';
 import Newsletter from '../models/Newsletter.js';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 const router = express.Router();
 
-// Enhanced email configuration with timeout and retries
-const emailConfig = {
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  secure: false,
-  requireTLS: true,
-  // Increased timeout settings
-  connectionTimeout: 90000, // 90 seconds
-  greetingTimeout: 90000,   // 90 seconds
-  socketTimeout: 120000,    // 120 seconds
-  // Retry configuration
-  maxConnections: 5,
-  maxRetries: 5
-};
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Enhanced email function for newsletter with retry logic
+// Enhanced email function for newsletter with Resend
 async function sendWelcomeEmail(subscriber) {
-  // Check if email credentials are configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('Email credentials not configured. Skipping welcome email.');
+  // Check if Resend API key is configured
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('Resend API key not configured. Skipping welcome email.');
     return;
   }
 
-  let retries = 5;
+  let retries = 3;
   let lastError = null;
 
   while (retries > 0) {
     try {
-      console.log(`📧 Attempting to send welcome email (${6 - retries}/5)...`);
-
-      const transporter = nodemailer.createTransport(emailConfig);
-
-      // Verify connection with timeout
-      await Promise.race([
-        transporter.verify(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Email verification timeout after 90s')), 90000)
-        )
-      ]);
+      console.log(`📧 Attempting to send welcome email (${4 - retries}/3)...`);
 
       const unsubscribeLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/unsubscribe?token=${subscriber.unsubscribeToken}`;
 
-      const mailOptions = {
-        from: `"Kongyu Jesse Portfolio" <${process.env.EMAIL_USER}>`,
-        to: subscriber.email,
+      const { data, error } = await resend.emails.send({
+        from: 'Kongyu Jesse Portfolio <newsletter@yourdomain.com>', // Replace with your verified domain
+        to: [subscriber.email],
         subject: '🎉 Welcome to My Newsletter!',
         html: `
           <!DOCTYPE html>
@@ -114,16 +86,12 @@ async function sendWelcomeEmail(subscriber) {
           </body>
           </html>
         `
-      };
+      });
 
-      // Send email with timeout
-      const result = await Promise.race([
-        transporter.sendMail(mailOptions),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Email sending timeout after 90s')), 90000)
-        )
-      ]);
-      
+      if (error) {
+        throw new Error(`Resend error: ${error.message}`);
+      }
+
       console.log('✅ Welcome email sent successfully to:', subscriber.email);
       return;
       
@@ -132,20 +100,18 @@ async function sendWelcomeEmail(subscriber) {
       retries--;
       
       if (retries > 0) {
-        console.warn(`❌ Welcome email attempt failed (${5 - retries}/5). Retrying in 10 seconds...`, error.message);
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 10000 * (5 - retries)));
+        console.warn(`❌ Welcome email attempt failed (${3 - retries}/3). Retrying in 5 seconds...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
         console.error('❌ All welcome email attempts failed:', error.message);
       }
     }
   }
 
-  // If we get here, all retries failed
-  console.error('💥 Final welcome email failure after 5 attempts:', lastError?.message);
+  console.error('💥 Final welcome email failure after 3 attempts:', lastError?.message);
 }
 
-// Subscribe to newsletter - FIXED DUPLICATE HANDLING
+// Subscribe to newsletter
 router.post('/subscribe', async (req, res) => {
   try {
     const { email } = req.body;
@@ -167,7 +133,7 @@ router.post('/subscribe', async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if already subscribed with better error handling
+    // Check if already subscribed
     const existingSubscriber = await Newsletter.findOne({ email: normalizedEmail });
     if (existingSubscriber) {
       if (existingSubscriber.subscribed) {
@@ -181,9 +147,9 @@ router.post('/subscribe', async (req, res) => {
         existingSubscriber.subscriptionDate = new Date();
         await existingSubscriber.save();
         
-        // Send welcome email with enhanced retry logic (non-blocking)
+        // Send welcome email (non-blocking)
         sendWelcomeEmail(existingSubscriber).catch(error => {
-          console.error('Welcome email failed after all retries:', error);
+          console.error('Welcome email failed:', error);
         });
         
         return res.json({ 
@@ -203,9 +169,9 @@ router.post('/subscribe', async (req, res) => {
 
     await subscriber.save();
     
-    // Send welcome email with enhanced retry logic (non-blocking)
+    // Send welcome email (non-blocking)
     sendWelcomeEmail(subscriber).catch(error => {
-      console.error('Welcome email failed after all retries:', error);
+      console.error('Welcome email failed:', error);
     });
 
     res.status(201).json({

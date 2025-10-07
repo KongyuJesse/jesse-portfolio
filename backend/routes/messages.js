@@ -1,62 +1,32 @@
 // backend/routes/messages.js
 import express from 'express';
 import Message from '../models/Message.js';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Enhanced email configuration with timeout and retries
-const emailConfig = {
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  secure: false,
-  requireTLS: true,
-  // Increased timeout settings
-  connectionTimeout: 90000, // 90 seconds
-  greetingTimeout: 90000,   // 90 seconds
-  socketTimeout: 120000,    // 120 seconds
-  // Retry configuration
-  maxConnections: 5,
-  maxRetries: 5
-};
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Enhanced email notification function with timeout and retry logic
+// Enhanced email notification function with Resend
 async function sendEmailNotification(message) {
-  // Check if email credentials are configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('Email credentials not configured. Skipping email notification.');
+  // Check if Resend API key is configured
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('Resend API key not configured. Skipping email notification.');
     return;
   }
 
-  let retries = 5;
+  let retries = 3;
   let lastError = null;
 
   while (retries > 0) {
     try {
-      console.log(`📧 Attempting to send email notification (${6 - retries}/5)...`);
+      console.log(`📧 Attempting to send email notification (${4 - retries}/3)...`);
 
-      const transporter = nodemailer.createTransport(emailConfig);
-
-      // Verify connection configuration with timeout
-      await Promise.race([
-        transporter.verify(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Email verification timeout after 90s')), 90000)
-        )
-      ]);
-      
-      console.log('✅ Email server connection verified');
-
-      const mailOptions = {
-        from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
-        to: 'kongyujesse@gmail.com',
+      const { data, error } = await resend.emails.send({
+        from: 'Portfolio Contact <notifications@yourdomain.com>', // Replace with your verified domain
+        to: ['kongyujesse@gmail.com'],
         subject: `📧 New Portfolio Message: ${message.subject}`,
         html: `
           <!DOCTYPE html>
@@ -102,17 +72,13 @@ async function sendEmailNotification(message) {
           </body>
           </html>
         `
-      };
+      });
 
-      // Send email with timeout
-      const result = await Promise.race([
-        transporter.sendMail(mailOptions),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Email sending timeout after 90s')), 90000)
-        )
-      ]);
-      
-      console.log('✅ Email notification sent successfully:', result.messageId);
+      if (error) {
+        throw new Error(`Resend error: ${error.message}`);
+      }
+
+      console.log('✅ Email notification sent successfully:', data?.id);
       
       // Mark message as notified
       await Message.findByIdAndUpdate(message._id, { notified: true });
@@ -123,18 +89,15 @@ async function sendEmailNotification(message) {
       retries--;
       
       if (retries > 0) {
-        console.warn(`❌ Email attempt failed (${5 - retries}/5). Retrying in 10 seconds...`, error.message);
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 10000 * (5 - retries)));
+        console.warn(`❌ Email attempt failed (${3 - retries}/3). Retrying in 5 seconds...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
         console.error('❌ All email attempts failed:', error.message);
       }
     }
   }
 
-  // If we get here, all retries failed
-  console.error('💥 Final email notification failure after 5 attempts:', lastError?.message);
-  // Don't throw error here - we don't want email failures to break the message saving
+  console.error('💥 Final email notification failure after 3 attempts:', lastError?.message);
 }
 
 // Create message with better error handling
@@ -166,9 +129,9 @@ router.post('/', async (req, res) => {
 
     await newMessage.save();
 
-    // Send email notification (non-blocking with enhanced retry logic)
+    // Send email notification (non-blocking)
     sendEmailNotification(newMessage).catch(error => {
-      console.error('Email notification failed after all retries:', error);
+      console.error('Email notification failed:', error);
     });
 
     res.status(201).json({

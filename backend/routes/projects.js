@@ -2,36 +2,18 @@ import express from 'express';
 import Project from '../models/Project.js';
 import Newsletter from '../models/Newsletter.js';
 import auth from '../middleware/auth.js';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 const router = express.Router();
 
-// Enhanced email configuration with timeout and retries
-const emailConfig = {
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  secure: false,
-  requireTLS: true,
-  // Increased timeout settings
-  connectionTimeout: 90000, // 90 seconds
-  greetingTimeout: 90000,   // 90 seconds
-  socketTimeout: 120000,    // 120 seconds
-  // Retry configuration
-  maxConnections: 5,
-  maxRetries: 5
-};
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Enhanced function to send project notification to subscribers with retry logic
+// Enhanced function to send project notification to subscribers with Resend
 async function sendProjectNotification(project) {
-  // Check if email credentials are configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('Email credentials not configured. Skipping project notification.');
+  // Check if Resend API key is configured
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('Resend API key not configured. Skipping project notification.');
     return;
   }
 
@@ -46,28 +28,18 @@ async function sendProjectNotification(project) {
 
     console.log(`📧 Preparing to send project notification to ${subscribers.length} subscribers...`);
 
-    // Send to each subscriber with individual retry logic
+    // Send to each subscriber
     for (const subscriber of subscribers) {
-      let retries = 5;
+      let retries = 3;
       let sentSuccessfully = false;
 
       while (retries > 0 && !sentSuccessfully) {
         try {
-          console.log(`📧 Attempting to send project notification to ${subscriber.email} (${6 - retries}/5)...`);
+          console.log(`📧 Attempting to send project notification to ${subscriber.email} (${4 - retries}/3)...`);
 
-          const transporter = nodemailer.createTransport(emailConfig);
-
-          // Verify connection with timeout
-          await Promise.race([
-            transporter.verify(),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Email verification timeout after 90s')), 90000)
-            )
-          ]);
-
-          const mailOptions = {
-            from: `"Kongyu Jesse Portfolio" <${process.env.EMAIL_USER}>`,
-            to: subscriber.email,
+          const { data, error } = await resend.emails.send({
+            from: 'Kongyu Jesse Portfolio <projects@yourdomain.com>', // Replace with your verified domain
+            to: [subscriber.email],
             subject: `🚀 New Project: ${project.title}`,
             html: `
               <!DOCTYPE html>
@@ -140,15 +112,11 @@ async function sendProjectNotification(project) {
               </body>
               </html>
             `
-          };
+          });
 
-          // Send email with timeout
-          await Promise.race([
-            transporter.sendMail(mailOptions),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Email sending timeout after 90s')), 90000)
-            )
-          ]);
+          if (error) {
+            throw new Error(`Resend error: ${error.message}`);
+          }
 
           console.log('✅ Project notification sent to:', subscriber.email);
           sentSuccessfully = true;
@@ -157,9 +125,8 @@ async function sendProjectNotification(project) {
           retries--;
           
           if (retries > 0) {
-            console.warn(`❌ Project notification attempt failed for ${subscriber.email} (${5 - retries}/5). Retrying in 10 seconds...`, error.message);
-            // Wait before retry (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, 10000 * (5 - retries)));
+            console.warn(`❌ Project notification attempt failed for ${subscriber.email} (${3 - retries}/3). Retrying in 5 seconds...`, error.message);
+            await new Promise(resolve => setTimeout(resolve, 5000));
           } else {
             console.error(`❌ All project notification attempts failed for ${subscriber.email}:`, error.message);
           }
@@ -239,9 +206,9 @@ router.post('/', auth, async (req, res) => {
     
     await project.save();
     
-    // Send notifications to subscribers with enhanced retry logic (non-blocking)
+    // Send notifications to subscribers (non-blocking)
     sendProjectNotification(project).catch(error => {
-      console.error('Project notification failed after all retries:', error);
+      console.error('Project notification failed:', error);
     });
     
     res.status(201).json(project);
