@@ -40,7 +40,7 @@ async function sendWelcomeEmail(subscriber) {
     try {
       console.log(`📧 Attempting to send welcome email (${6 - retries}/5)...`);
 
-      const transporter = nodemailer.createTransporter(emailConfig);
+      const transporter = nodemailer.createTransport(emailConfig);
 
       // Verify connection with timeout
       await Promise.race([

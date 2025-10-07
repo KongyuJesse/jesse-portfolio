@@ -42,7 +42,7 @@ async function sendEmailNotification(message) {
     try {
       console.log(`📧 Attempting to send email notification (${6 - retries}/5)...`);
 
-      const transporter = nodemailer.createTransporter(emailConfig);
+      const transporter = nodemailer.createTransport(emailConfig);
 
       // Verify connection configuration with timeout
       await Promise.race([

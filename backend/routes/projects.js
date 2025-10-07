@@ -55,7 +55,7 @@ async function sendProjectNotification(project) {
         try {
           console.log(`📧 Attempting to send project notification to ${subscriber.email} (${6 - retries}/5)...`);
 
-          const transporter = nodemailer.createTransporter(emailConfig);
+          const transporter = nodemailer.createTransport(emailConfig);
 
           // Verify connection with timeout
           await Promise.race([
