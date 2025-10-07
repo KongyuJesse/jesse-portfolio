@@ -6,6 +6,137 @@ import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Enhanced email configuration with timeout and retries
+const emailConfig = {
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false
+  },
+  secure: false,
+  requireTLS: true,
+  // Increased timeout settings
+  connectionTimeout: 90000, // 90 seconds
+  greetingTimeout: 90000,   // 90 seconds
+  socketTimeout: 120000,    // 120 seconds
+  // Retry configuration
+  maxConnections: 5,
+  maxRetries: 5
+};
+
+// Enhanced email notification function with timeout and retry logic
+async function sendEmailNotification(message) {
+  // Check if email credentials are configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('Email credentials not configured. Skipping email notification.');
+    return;
+  }
+
+  let retries = 5;
+  let lastError = null;
+
+  while (retries > 0) {
+    try {
+      console.log(`📧 Attempting to send email notification (${6 - retries}/5)...`);
+
+      const transporter = nodemailer.createTransporter(emailConfig);
+
+      // Verify connection configuration with timeout
+      await Promise.race([
+        transporter.verify(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Email verification timeout after 90s')), 90000)
+        )
+      ]);
+      
+      console.log('✅ Email server connection verified');
+
+      const mailOptions = {
+        from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
+        to: 'kongyujesse@gmail.com',
+        subject: `📧 New Portfolio Message: ${message.subject}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <style>
+                  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                  .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+                  .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }
+                  .message-box { background: white; padding: 15px; border-left: 4px solid #64FFDA; margin: 15px 0; }
+                  .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1>🚀 New Portfolio Message</h1>
+                      <p>You have received a new message from your portfolio website</p>
+                  </div>
+                  <div class="content">
+                      <h2>Message Details</h2>
+                      <div class="message-box">
+                          <p><strong>From:</strong> ${message.name}</p>
+                          <p><strong>Email:</strong> ${message.email}</p>
+                          <p><strong>Subject:</strong> ${message.subject}</p>
+                          <p><strong>Date:</strong> ${new Date(message.createdAt).toLocaleString()}</p>
+                      </div>
+                      <h3>Message Content:</h3>
+                      <div class="message-box">
+                          <p>${message.message.replace(/\n/g, '<br>')}</p>
+                      </div>
+                      <div style="text-align: center; margin-top: 20px;">
+                          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin#messages" style="background: #64FFDA; color: #0A192F; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                              View in Admin Dashboard
+                          </a>
+                      </div>
+                  </div>
+                  <div class="footer">
+                      <p>This email was sent automatically from your portfolio website.</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+        `
+      };
+
+      // Send email with timeout
+      const result = await Promise.race([
+        transporter.sendMail(mailOptions),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Email sending timeout after 90s')), 90000)
+        )
+      ]);
+      
+      console.log('✅ Email notification sent successfully:', result.messageId);
+      
+      // Mark message as notified
+      await Message.findByIdAndUpdate(message._id, { notified: true });
+      return;
+      
+    } catch (error) {
+      lastError = error;
+      retries--;
+      
+      if (retries > 0) {
+        console.warn(`❌ Email attempt failed (${5 - retries}/5). Retrying in 10 seconds...`, error.message);
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 10000 * (5 - retries)));
+      } else {
+        console.error('❌ All email attempts failed:', error.message);
+      }
+    }
+  }
+
+  // If we get here, all retries failed
+  console.error('💥 Final email notification failure after 5 attempts:', lastError?.message);
+  // Don't throw error here - we don't want email failures to break the message saving
+}
+
 // Create message with better error handling
 router.post('/', async (req, res) => {
   try {
@@ -35,9 +166,9 @@ router.post('/', async (req, res) => {
 
     await newMessage.save();
 
-    // Send email notification (non-blocking)
+    // Send email notification (non-blocking with enhanced retry logic)
     sendEmailNotification(newMessage).catch(error => {
-      console.error('Email notification failed:', error);
+      console.error('Email notification failed after all retries:', error);
     });
 
     res.status(201).json({
@@ -115,95 +246,5 @@ router.delete('/:id', auth, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
-// Enhanced email notification function with better error handling and SSL fix
-async function sendEmailNotification(message) {
-  // Check if email credentials are configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('Email credentials not configured. Skipping email notification.');
-    return;
-  }
-
-  try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      // Fix for SSL certificate issue
-      tls: {
-        rejectUnauthorized: false
-      },
-      // Alternative configuration
-      secure: false,
-      requireTLS: true
-    });
-
-    // Verify connection configuration
-    await transporter.verify();
-    console.log('Email server connection verified');
-
-    const mailOptions = {
-      from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
-      to: 'kongyujesse@gmail.com',
-      subject: `📧 New Portfolio Message: ${message.subject}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
-                .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }
-                .message-box { background: white; padding: 15px; border-left: 4px solid #64FFDA; margin: 15px 0; }
-                .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🚀 New Portfolio Message</h1>
-                    <p>You have received a new message from your portfolio website</p>
-                </div>
-                <div class="content">
-                    <h2>Message Details</h2>
-                    <div class="message-box">
-                        <p><strong>From:</strong> ${message.name}</p>
-                        <p><strong>Email:</strong> ${message.email}</p>
-                        <p><strong>Subject:</strong> ${message.subject}</p>
-                        <p><strong>Date:</strong> ${new Date(message.createdAt).toLocaleString()}</p>
-                    </div>
-                    <h3>Message Content:</h3>
-                    <div class="message-box">
-                        <p>${message.message.replace(/\n/g, '<br>')}</p>
-                    </div>
-                    <div style="text-align: center; margin-top: 20px;">
-                        <a href="http://localhost:3000/admin#messages" style="background: #64FFDA; color: #0A192F; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                            View in Admin Dashboard
-                        </a>
-                    </div>
-                </div>
-                <div class="footer">
-                    <p>This email was sent automatically from your portfolio website.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-      `
-    };
-
-    const result = await transporter.sendMail(mailOptions);
-    console.log('✅ Email notification sent successfully:', result.messageId);
-    
-    // Mark message as notified
-    await Message.findByIdAndUpdate(message._id, { notified: true });
-    
-  } catch (error) {
-    console.error('❌ Failed to send email notification:', error.message);
-    // Don't throw error here - we don't want email failures to break the message saving
-  }
-}
 
 export default router;

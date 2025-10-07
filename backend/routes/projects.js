@@ -6,7 +6,28 @@ import nodemailer from 'nodemailer';
 
 const router = express.Router();
 
-// Function to send project notification to subscribers
+// Enhanced email configuration with timeout and retries
+const emailConfig = {
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: false
+  },
+  secure: false,
+  requireTLS: true,
+  // Increased timeout settings
+  connectionTimeout: 90000, // 90 seconds
+  greetingTimeout: 90000,   // 90 seconds
+  socketTimeout: 120000,    // 120 seconds
+  // Retry configuration
+  maxConnections: 5,
+  maxRetries: 5
+};
+
+// Enhanced function to send project notification to subscribers with retry logic
 async function sendProjectNotification(project) {
   // Check if email credentials are configured
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -23,107 +44,130 @@ async function sendProjectNotification(project) {
       return;
     }
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      secure: false,
-      requireTLS: true
-    });
+    console.log(`📧 Preparing to send project notification to ${subscribers.length} subscribers...`);
 
-    await transporter.verify();
-
-    // Send to each subscriber
+    // Send to each subscriber with individual retry logic
     for (const subscriber of subscribers) {
-      const mailOptions = {
-        from: `"Kongyu Jesse Portfolio" <${process.env.EMAIL_USER}>`,
-        to: subscriber.email,
-        subject: `🚀 New Project: ${project.title}`,
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <style>
-                  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                  .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 30px 20px; text-align: center; border-radius: 10px 10px 0 0; }
-                  .content { background: #f9f9f9; padding: 25px; border-radius: 0 0 10px 10px; }
-                  .project-image { width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin: 15px 0; }
-                  .project-details { background: white; padding: 20px; border-radius: 8px; margin: 15px 0; }
-                  .cta-button { display: inline-block; background: #64FFDA; color: #0A192F; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 10px 5px; }
-                  .footer { text-align: center; margin-top: 25px; color: #666; font-size: 12px; }
-                  .unsubscribe { text-align: center; margin-top: 15px; font-size: 12px; color: #999; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <div class="header">
-                      <h1>🎉 New Project Alert!</h1>
-                      <p>I've just launched a new project</p>
-                  </div>
-                  <div class="content">
-                      <h2>${project.title}</h2>
-                      
-                      ${project.image ? `<img src="${project.image}" alt="${project.title}" class="project-image">` : ''}
-                      
-                      <div class="project-details">
-                          <p><strong>Description:</strong> ${project.shortDescription || project.description}</p>
-                          
-                          ${project.technologies && project.technologies.length > 0 ? `
-                          <p><strong>Technologies:</strong> ${project.technologies.join(', ')}</p>
-                          ` : ''}
-                          
-                          ${project.category ? `
-                          <p><strong>Category:</strong> ${project.category}</p>
-                          ` : ''}
+      let retries = 5;
+      let sentSuccessfully = false;
+
+      while (retries > 0 && !sentSuccessfully) {
+        try {
+          console.log(`📧 Attempting to send project notification to ${subscriber.email} (${6 - retries}/5)...`);
+
+          const transporter = nodemailer.createTransporter(emailConfig);
+
+          // Verify connection with timeout
+          await Promise.race([
+            transporter.verify(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Email verification timeout after 90s')), 90000)
+            )
+          ]);
+
+          const mailOptions = {
+            from: `"Kongyu Jesse Portfolio" <${process.env.EMAIL_USER}>`,
+            to: subscriber.email,
+            subject: `🚀 New Project: ${project.title}`,
+            html: `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                  <style>
+                      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+                      .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                      .header { background: linear-gradient(135deg, #64FFDA, #0A192F); color: white; padding: 30px 20px; text-align: center; border-radius: 10px 10px 0 0; }
+                      .content { background: #f9f9f9; padding: 25px; border-radius: 0 0 10px 10px; }
+                      .project-image { width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; margin: 15px 0; }
+                      .project-details { background: white; padding: 20px; border-radius: 8px; margin: 15px 0; }
+                      .cta-button { display: inline-block; background: #64FFDA; color: #0A192F; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 10px 5px; }
+                      .footer { text-align: center; margin-top: 25px; color: #666; font-size: 12px; }
+                      .unsubscribe { text-align: center; margin-top: 15px; font-size: 12px; color: #999; }
+                  </style>
+              </head>
+              <body>
+                  <div class="container">
+                      <div class="header">
+                          <h1>🎉 New Project Alert!</h1>
+                          <p>I've just launched a new project</p>
                       </div>
+                      <div class="content">
+                          <h2>${project.title}</h2>
+                          
+                          ${project.image ? `<img src="${project.image}" alt="${project.title}" class="project-image">` : ''}
+                          
+                          <div class="project-details">
+                              <p><strong>Description:</strong> ${project.shortDescription || project.description}</p>
+                              
+                              ${project.technologies && project.technologies.length > 0 ? `
+                              <p><strong>Technologies:</strong> ${project.technologies.join(', ')}</p>
+                              ` : ''}
+                              
+                              ${project.category ? `
+                              <p><strong>Category:</strong> ${project.category}</p>
+                              ` : ''}
+                          </div>
 
-                      <div style="text-align: center; margin: 20px 0;">
-                          ${project.liveUrl ? `
-                          <a href="${project.liveUrl}" class="cta-button" target="_blank">🌐 Live Demo</a>
-                          ` : ''}
+                          <div style="text-align: center; margin: 20px 0;">
+                              ${project.liveUrl ? `
+                              <a href="${project.liveUrl}" class="cta-button" target="_blank">🌐 Live Demo</a>
+                              ` : ''}
+                              
+                              ${project.githubUrl ? `
+                              <a href="${project.githubUrl}" class="cta-button" style="background: #333; color: white;" target="_blank">💻 View Code</a>
+                              ` : ''}
+                              
+                              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}#projects" class="cta-button" style="background: #0A192F; color: white;">📂 View All Projects</a>
+                          </div>
+
+                          <p>Thank you for being part of my journey! I hope you find this project interesting.</p>
                           
-                          ${project.githubUrl ? `
-                          <a href="${project.githubUrl}" class="cta-button" style="background: #333; color: white;" target="_blank">💻 View Code</a>
-                          ` : ''}
-                          
-                          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}#projects" class="cta-button" style="background: #0A192F; color: white;">📂 View All Projects</a>
+                          <p>Best regards,<br><strong>Kongyu Jesse Ntani</strong></p>
                       </div>
-
-                      <p>Thank you for being part of my journey! I hope you find this project interesting.</p>
                       
-                      <p>Best regards,<br><strong>Kongyu Jesse Ntani</strong></p>
+                      <div class="unsubscribe">
+                          <p>
+                              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/unsubscribe?token=${subscriber.unsubscribeToken}" style="color: #666; text-decoration: none;">
+                                  Unsubscribe from these notifications
+                              </a>
+                          </p>
+                      </div>
+                      
+                      <div class="footer">
+                          <p>This email was sent to ${subscriber.email} because you subscribed to updates from my portfolio.</p>
+                      </div>
                   </div>
-                  
-                  <div class="unsubscribe">
-                      <p>
-                          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/unsubscribe?token=${subscriber.unsubscribeToken}" style="color: #666; text-decoration: none;">
-                              Unsubscribe from these notifications
-                          </a>
-                      </p>
-                  </div>
-                  
-                  <div class="footer">
-                      <p>This email was sent to ${subscriber.email} because you subscribed to updates from my portfolio.</p>
-                  </div>
-              </div>
-          </body>
-          </html>
-        `
-      };
+              </body>
+              </html>
+            `
+          };
 
-      try {
-        await transporter.sendMail(mailOptions);
-        console.log('✅ Project notification sent to:', subscriber.email);
-      } catch (emailError) {
-        console.error('❌ Failed to send project notification to:', subscriber.email, emailError.message);
+          // Send email with timeout
+          await Promise.race([
+            transporter.sendMail(mailOptions),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Email sending timeout after 90s')), 90000)
+            )
+          ]);
+
+          console.log('✅ Project notification sent to:', subscriber.email);
+          sentSuccessfully = true;
+          
+        } catch (error) {
+          retries--;
+          
+          if (retries > 0) {
+            console.warn(`❌ Project notification attempt failed for ${subscriber.email} (${5 - retries}/5). Retrying in 10 seconds...`, error.message);
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 10000 * (5 - retries)));
+          } else {
+            console.error(`❌ All project notification attempts failed for ${subscriber.email}:`, error.message);
+          }
+        }
       }
     }
+    
+    console.log('✅ Project notification process completed');
     
   } catch (error) {
     console.error('❌ Failed to send project notifications:', error.message);
@@ -195,9 +239,9 @@ router.post('/', auth, async (req, res) => {
     
     await project.save();
     
-    // Send notifications to subscribers (non-blocking)
+    // Send notifications to subscribers with enhanced retry logic (non-blocking)
     sendProjectNotification(project).catch(error => {
-      console.error('Project notification failed:', error);
+      console.error('Project notification failed after all retries:', error);
     });
     
     res.status(201).json(project);
