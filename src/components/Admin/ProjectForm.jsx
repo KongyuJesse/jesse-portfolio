@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import  api  from '../../utils/api';
+import { uploadImage } from '../../utils/api';
 import { useNotifications } from '../../hooks/useNotifications';
 import Button from '../UI/Button';
 
@@ -14,7 +14,7 @@ const ProjectForm = ({ project, onSuccess, onCancel }) => {
     liveUrl: '',
     githubUrl: '',
     featured: false,
-    status: 'in-progress' // Changed from 'under-development'
+    status: 'in-progress'
   });
   const [techInput, setTechInput] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -33,7 +33,7 @@ const ProjectForm = ({ project, onSuccess, onCancel }) => {
         liveUrl: project.liveUrl || '',
         githubUrl: project.githubUrl || '',
         featured: project.featured || false,
-        status: project.status || 'in-progress' // Changed from 'under-development'
+        status: project.status || 'in-progress'
       });
     }
   }, [project]);
@@ -104,10 +104,10 @@ const ProjectForm = ({ project, onSuccess, onCancel }) => {
 
     setUploading(true);
     try {
-      const uploadFormData = new FormData();
-      uploadFormData.append('image', file);
+      const formData = new FormData();
+      formData.append('image', file);
 
-      const response = await api.uploadImage(uploadFormData);
+      const response = await uploadImage(formData);
       
       setFormData(prev => ({ ...prev, image: response.url }));
       addNotification({

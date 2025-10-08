@@ -191,7 +191,7 @@ export const deleteResume = async (id) => {
   return response.data;
 };
 
-// Upload API
+// Upload API - FIXED: Use the api instance instead of fetch
 export const uploadImage = async (formData) => {
   const response = await api.post('/upload/image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

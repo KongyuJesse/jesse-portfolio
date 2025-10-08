@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import  api  from '../../utils/api';
+import { uploadImage } from '../../utils/api';
 import { useNotifications } from '../../hooks/useNotifications';
 import Button from '../UI/Button';
 
@@ -98,18 +98,8 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
       const formData = new FormData();
       formData.append('image', file);
 
-      const response = await fetch('/api/upload/image', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) throw new Error('Upload failed');
-
-      const data = await response.json();
-      setFormData(prev => ({ ...prev, image: data.url }));
+      const response = await uploadImage(formData);
+      setFormData(prev => ({ ...prev, image: response.url }));
       addNotification({
         type: 'success',
         title: 'Success!',
