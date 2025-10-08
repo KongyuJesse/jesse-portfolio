@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadImage } from '../../utils/api';
+import { createCertificate, updateCertificate, uploadImage } from '../../utils/api';
 import { useNotifications } from '../../hooks/useNotifications';
 import Button from '../UI/Button';
 
@@ -39,12 +39,14 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
     setLoading(true);
 
     try {
-      if (!formData.image) {
+      // Validate required fields
+      if (!formData.name || !formData.issuer || !formData.issueDate || !formData.image || !formData.description) {
         addNotification({
           type: 'error',
           title: 'Validation Error',
-          message: 'Certificate image is required'
+          message: 'Please fill all required fields: Name, Issuer, Issue Date, Image, and Description'
         });
+        setLoading(false);
         return;
       }
 
@@ -54,14 +56,14 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
       };
 
       if (certificate) {
-        await api.updateCertificate(certificate._id, submitData);
+        await updateCertificate(certificate._id, submitData);
         addNotification({
           type: 'success',
           title: 'Success!',
           message: 'Certificate updated successfully'
         });
       } else {
-        await api.createCertificate(submitData);
+        await createCertificate(submitData);
         addNotification({
           type: 'success',
           title: 'Success!',
@@ -70,10 +72,11 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
       }
       onSuccess();
     } catch (error) {
+      console.error('Certificate save error:', error);
       addNotification({
         type: 'error',
         title: 'Error',
-        message: 'Failed to save certificate'
+        message: error.response?.data?.message || 'Failed to save certificate. Please try again.'
       });
     } finally {
       setLoading(false);
@@ -88,17 +91,28 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
       addNotification({
         type: 'error',
         title: 'Invalid File',
-        message: 'Please select an image file'
+        message: 'Please select an image file (JPEG, PNG, etc.)'
+      });
+      return;
+    }
+
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      addNotification({
+        type: 'error',
+        title: 'File Too Large',
+        message: 'Image must be less than 5MB'
       });
       return;
     }
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('image', file);
+      const uploadFormData = new FormData();
+      uploadFormData.append('image', file);
 
-      const response = await uploadImage(formData);
+      const response = await uploadImage(uploadFormData);
+      
       setFormData(prev => ({ ...prev, image: response.url }));
       addNotification({
         type: 'success',
@@ -106,10 +120,11 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
         message: 'Certificate image uploaded successfully'
       });
     } catch (error) {
+      console.error('Image upload error:', error);
       addNotification({
         type: 'error',
         title: 'Upload Failed',
-        message: 'Failed to upload certificate image'
+        message: error.response?.data?.message || 'Failed to upload image. Please try again.'
       });
     } finally {
       setUploading(false);
@@ -212,20 +227,32 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
             onChange={handleImageUpload}
             className="hidden"
             id="certificate-image-upload"
+            disabled={uploading}
           />
           <label
             htmlFor="certificate-image-upload"
-            className="px-4 py-2 bg-teal text-navy-900 rounded-lg cursor-pointer hover:bg-teal/90 transition-colors font-medium"
+            className={`px-4 py-2 rounded-lg cursor-pointer font-medium transition-colors ${
+              uploading 
+                ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+                : 'bg-teal text-navy-900 hover:bg-teal/90'
+            }`}
           >
             {uploading ? 'Uploading...' : 'Upload Certificate Image'}
           </label>
           {formData.image && (
             <div className="flex items-center space-x-2">
-              <img src={formData.image} alt="Preview" className="w-16 h-12 object-cover rounded" />
-              <span className="text-muted-silver text-sm">Image selected</span>
+              <img 
+                src={formData.image} 
+                alt="Preview" 
+                className="w-16 h-12 object-cover rounded border border-teal/30" 
+              />
+              <span className="text-teal text-sm font-medium">✓ Image selected</span>
             </div>
           )}
         </div>
+        <p className="text-muted-silver text-sm mt-2">
+          Supported formats: JPEG, PNG, WebP. Max size: 5MB
+        </p>
       </div>
 
       <div>
@@ -256,7 +283,7 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
               <button
                 type="button"
                 onClick={() => removeSkill(skill)}
-                className="ml-2 text-navy-900 hover:text-red-500 text-xs"
+                className="ml-2 text-navy-900 hover:text-red-500 text-xs transition-colors"
               >
                 ✕
               </button>
@@ -271,11 +298,13 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
             onKeyPress={handleKeyPress}
             placeholder="Add skill and press Enter..."
             className="flex-1 px-4 py-2 bg-navy-900 border border-muted-silver/30 rounded-lg text-soft-white focus:outline-none focus:border-teal"
+            disabled={loading}
           />
           <button
             type="button"
             onClick={addSkill}
-            className="px-4 py-2 bg-charcoal text-soft-white rounded-lg hover:bg-teal hover:text-navy-900 transition-colors font-medium"
+            className="px-4 py-2 bg-charcoal text-soft-white rounded-lg hover:bg-teal hover:text-navy-900 transition-colors font-medium disabled:opacity-50"
+            disabled={loading || !skillInput.trim()}
           >
             Add
           </button>
@@ -289,6 +318,7 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
             checked={formData.featured}
             onChange={(e) => setFormData({ ...formData, featured: e.target.checked })}
             className="rounded text-teal focus:ring-teal"
+            disabled={loading}
           />
           <span className="text-soft-white font-medium">Featured Certificate</span>
         </label>
@@ -300,7 +330,7 @@ const CertificateForm = ({ certificate, onSuccess, onCancel }) => {
       <div className="flex space-x-4 pt-4 border-t border-muted-silver/20">
         <Button
           type="submit"
-          disabled={loading || uploading}
+          disabled={loading || uploading || !formData.name || !formData.issuer || !formData.issueDate || !formData.image || !formData.description}
           className="flex-1"
         >
           {loading ? 'Saving...' : (certificate ? 'Update Certificate' : 'Create Certificate')}
