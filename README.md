@@ -1,21 +1,33 @@
-<<<<<<< HEAD
-# React + Vite
+# 🌟 Jesse Portfolio
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, responsive, and fully customizable **developer portfolio website** built with **React + Vite** and styled with **Tailwind CSS**.  
+It serves as a personal hub to showcase your skills, projects, certifications, and achievements — all in one place.
 
-Currently, two official plugins are available:
+🔗 **Live Demo:** [jesse-portfolio-kf1b.vercel.app](https://jesse-portfolio-kf1b.vercel.app)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- ⚡ **Fast and Lightweight** – Powered by Vite for blazing-fast builds and hot-reloading.  
+- 🎨 **Responsive & Minimal UI** – Clean, professional design with Tailwind CSS.  
+- 🧠 **Modular Components** – Easy to extend and customize.  
+- 📜 **Project Showcase** – Highlight your best work.  
+- 🛠️ **Skills & Experience** – Display your tools, technologies, and achievements.  
+- 📬 **Contact Form** – Allow visitors to reach you easily.  
+- ☁️ **Backend API Ready** – Optional Node.js/Express backend for handling contact forms or messages.
 
-## Expanding the ESLint configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-=======
-# jesse-portfolio
-This is my Porfolio
->>>>>>> 10f9cbaf235ae3cf976b49fecd4c5a62080a16ad
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React, Vite |
+| Styling | Tailwind CSS |
+| Linting | ESLint |
+| Backend (Optional) | Node.js + Express |
+| Deployment | Vercel / Render |
+
+
+
+
