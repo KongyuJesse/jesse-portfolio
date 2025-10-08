@@ -12,35 +12,44 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // Increased timeout
+  timeout: 15000, // Default timeout for regular requests
 });
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('adminToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// Special axios instance for file uploads with longer timeout
+const uploadApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 60000, // 60 seconds for uploads
+});
 
-// Response interceptor for error handling
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('adminToken');
-      // Use window.location for more reliable redirect
-      window.location.href = '/#/admin';
+// Request interceptors for both instances
+const setupInterceptors = (axiosInstance) => {
+  axiosInstance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('adminToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
-);
+  );
+
+  axiosInstance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('adminToken');
+        window.location.href = '/#/admin';
+      }
+      return Promise.reject(error);
+    }
+  );
+};
+
+setupInterceptors(api);
+setupInterceptors(uploadApi);
 
 // Enhanced API functions with better error handling
 export const login = async (credentials) => {
@@ -191,17 +200,35 @@ export const deleteResume = async (id) => {
   return response.data;
 };
 
-// Upload API - FIXED: Use the api instance instead of fetch
+// Upload API - FIXED: Use uploadApi instance with longer timeout
 export const uploadImage = async (formData) => {
-  const response = await api.post('/upload/image', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
-  return response.data;
+  try {
+    const response = await uploadApi.post('/upload/image', formData, {
+      headers: { 
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000, // 60 seconds
+      onUploadProgress: (progressEvent) => {
+        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        console.log(`Upload progress: ${progress}%`);
+      }
+    });
+    return response.data;
+  } catch (error) {
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Upload timeout. The server is taking too long to respond. Please try again.');
+    }
+    if (error.response?.status === 413) {
+      throw new Error('File too large. Please choose a smaller image.');
+    }
+    throw error;
+  }
 };
 
 export const uploadDocument = async (formData) => {
-  const response = await api.post('/upload/resume', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+  const response = await uploadApi.post('/upload/resume', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000 // 60 seconds
   });
   return response.data;
 };
@@ -229,8 +256,8 @@ export const getSubscribers = async () => {
   return response.data;
 };
 
-// Export the axios instance
-export { api };
+// Export the axios instances
+export { api, uploadApi };
 
 export default {
   login,
