@@ -1,4 +1,3 @@
-// backend/routes/resume.js
 import express from 'express';
 import Resume from '../models/Resume.js';
 import auth from '../middleware/auth.js';

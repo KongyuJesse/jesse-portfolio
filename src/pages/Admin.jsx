@@ -1,4 +1,3 @@
-// src/pages/Admin.jsx (Fixed)
 import React, { useState, useEffect } from 'react'
 import { useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { login, verifyToken } from '../utils/api'

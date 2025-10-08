@@ -1,4 +1,3 @@
-// backend/routes/messages.js
 import express from 'express';
 import Message from '../models/Message.js';
 import mailjet from 'node-mailjet';

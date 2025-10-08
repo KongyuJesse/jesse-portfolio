@@ -1,4 +1,3 @@
-// routes/content.js
 import express from 'express';
 import Content from '../models/Content.js';
 import auth from '../middleware/auth.js';

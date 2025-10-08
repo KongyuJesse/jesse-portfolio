@@ -1,4 +1,3 @@
-// src/components/Admin/AdminDashboard.jsx (Fixed)
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import ProjectManager from './ProjectManager';

@@ -1,4 +1,3 @@
-// Hero.jsx - Updated with enhanced profile picture design
 import React from 'react';
 import { motion } from 'framer-motion';
 import TypingEffect from './UI/TypingEffect';

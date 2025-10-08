@@ -1,4 +1,4 @@
-// test-backend.js
+
 import axios from 'axios';
 
 async function testBackend() {

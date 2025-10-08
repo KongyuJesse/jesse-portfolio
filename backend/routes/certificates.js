@@ -1,4 +1,3 @@
-// backend/routes/certificates-enhanced.js
 import express from 'express';
 import Certificate from '../models/Certificate.js';
 import auth from '../middleware/auth.js';

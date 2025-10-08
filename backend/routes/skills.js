@@ -1,4 +1,3 @@
-// backend/routes/skills-enhanced.js
 import express from 'express';
 import Skill from '../models/Skill.js';
 import auth from '../middleware/auth.js';
