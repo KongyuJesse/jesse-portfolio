@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadImage } from '../../utils/api';
+import { createProject, updateProject, uploadImage } from '../../utils/api';
 import { useNotifications } from '../../hooks/useNotifications';
 import Button from '../UI/Button';
 
@@ -52,15 +52,16 @@ const ProjectForm = ({ project, onSuccess, onCancel }) => {
         return;
       }
 
+      // Use the imported functions directly, not api.createProject
       if (project) {
-        await api.updateProject(project._id, formData);
+        await updateProject(project._id, formData);
         addNotification({
           type: 'success',
           title: 'Success!',
           message: 'Project updated successfully'
         });
       } else {
-        await api.createProject(formData);
+        await createProject(formData);
         addNotification({
           type: 'success',
           title: 'Success!',
@@ -104,10 +105,10 @@ const ProjectForm = ({ project, onSuccess, onCancel }) => {
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('image', file);
+      const uploadFormData = new FormData();
+      uploadFormData.append('image', file);
 
-      const response = await uploadImage(formData);
+      const response = await uploadImage(uploadFormData);
       
       setFormData(prev => ({ ...prev, image: response.url }));
       addNotification({
